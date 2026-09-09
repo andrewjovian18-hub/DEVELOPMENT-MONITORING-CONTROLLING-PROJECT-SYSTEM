@@ -46,3 +46,7 @@ This repository contains the approved requirements for a four-module project mon
 > The system should tell users what needs attention before they have to search for it.
 
 See `AGENTS.md` before starting implementation.
+
+## Sprint 1 implementation
+
+See [setup and validation instructions](docs/SETUP.md) to initialize a bound Google Sheets workbook with the scripts in `apps-script/`. Run `npm test` with Node.js 20+ for the dependency-free foundation checks. This sprint provides schemas, masters, IDs, audit/timestamp helpers, validation and Admin-only protection defaults. Workflow engines and operational editing are deferred to their module sprints.
