@@ -29,3 +29,21 @@ function nextId_(ss, kind, now) {
   properties.setProperty(key, String(max + 1));
   return prefix + String(max + 1).padStart(4, '0');
 }
+
+/** Reserve new SRO IDs in one property write; caller already batch-read/validated the SRO table. */
+function reserveSroIds_(ss, records, count, now) {
+  if (!count) return [];
+  var prefix = 'SRO-' + Utilities.formatDate(now, ss.getSpreadsheetTimeZone(), 'yyyy') + '-';
+  var props = PropertiesService.getDocumentProperties(), key = 'ID_COUNTER:' + prefix;
+  var max = Number(props.getProperty(key) || 0);
+  records.forEach(function (r) {
+    if (r.SRO_ID.indexOf(prefix) === 0) {
+      var suffix = r.SRO_ID.slice(prefix.length);
+      if (!/^\d+$/.test(suffix)) throw new Error('INVALID_ID: ' + r.SRO_ID);
+      max = Math.max(max, Number(suffix));
+    }
+  });
+  if (!Number.isSafeInteger(max) || max < 0 || !Number.isSafeInteger(max + count)) throw new Error('INVALID_ID_COUNTER');
+  props.setProperty(key, String(max + count));
+  return Array.from({length: count}, function (_, i) { return prefix + String(max + i + 1).padStart(4, '0'); });
+}

@@ -1,5 +1,7 @@
 # Sprint 1 setup
 
+For the Sprint 2 codebase, continue with [SRO pilot setup](SPRINT_2_SETUP.md). The Sprint 1 behavior described below applies before enabling the pilot; the updated manifest and SRO guide describe additional scopes and explicitly installed triggers.
+
 This is the foundation for Issue #1, not a production monitoring deployment. All 19 sheets are initialized; operational records and engines are deliberately absent.
 
 ## Initialize a workbook

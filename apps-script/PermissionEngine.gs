@@ -19,4 +19,5 @@ function applyFoundationProtections_(ss) {
     });
     if (/^(20|21|22|23|98|99)_/.test(name)) sheet.hideSheet();
   });
+  if (PropertiesService.getDocumentProperties().getProperty('SRO_PILOT_ENABLED') === 'true') applySroProtections_(ss);
 }

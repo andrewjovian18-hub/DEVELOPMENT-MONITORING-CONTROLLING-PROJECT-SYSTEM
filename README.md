@@ -49,4 +49,8 @@ See `AGENTS.md` before starting implementation.
 
 ## Sprint 1 implementation
 
-See [setup and validation instructions](docs/SETUP.md) to initialize a bound Google Sheets workbook with the scripts in `apps-script/`. Run `npm test` with Node.js 20+ for the dependency-free foundation checks. This sprint provides schemas, masters, IDs, audit/timestamp helpers, validation and Admin-only protection defaults. Workflow engines and operational editing are deferred to their module sprints.
+See [foundation setup](docs/SETUP.md) to initialize a bound Google Sheets workbook with the scripts in `apps-script/`. Run `npm test` with Node.js 20+ for the dependency-free checks.
+
+## Sprint 2 — SRO Pilot
+
+See [SRO pilot setup and integration limits](docs/SPRINT_2_SETUP.md) for Planning mapping, Tender=100% creation, stable IDs, baseline/history, Thursday progress, audited edits and opt-in polling. The SRO-2026 narrative profile has been checked against a read-only source snapshot; team-owned stable IDs, destination project mapping and live deployment checks remain pending. Source actual can migrate once without later overwrite. Push-back remains disabled by default. Other module engines remain deferred.

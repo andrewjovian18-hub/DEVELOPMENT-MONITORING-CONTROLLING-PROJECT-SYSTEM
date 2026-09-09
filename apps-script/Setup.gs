@@ -36,7 +36,7 @@ function setupFoundation() {
     ss.getSheetByName('00_DASHBOARD').setHiddenGridlines(true);
     ss.setActiveSheet(ss.getSheetByName('00_DASHBOARD'));
     auditRows_(ss, [[new Date(), actor, 'FOUNDATION', ss.getId(), 'setup', '', 'Foundation initialized/refreshed', 'SYSTEM']]);
-    return 'Foundation ready. No workflow engines or scheduled triggers installed.';
+    return 'Foundation initialized/refreshed. Existing triggers are unchanged.';
   });
 }
 
