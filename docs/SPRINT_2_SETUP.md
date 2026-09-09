@@ -4,9 +4,33 @@ This sprint adds Planning block parsing, Tender-gated SRO creation, baseline his
 
 ## Current integration status
 
-The user supplied a Planning workbook and named its `SRO-2026` tab. The connected account is `drewphotograph18@gmail.com`. Metadata access returned **403 PERMISSION_DENIED**, so the real header/block structure has **not** been inspected or validated. No changes, ID writes, triggers, or Apps Script installation have been made in that live workbook. The source workbook ID is intentionally not hard-coded or committed; configure it in the destination workbook's Settings.
+Viewer access now works. The actual `SRO-2026` tab was inspected: 49 request blocks, 39 with Tender=100%, 10 below 100%. Among the qualifying items, 20 already have Execution=100% and 4 have partial progress. All 39 qualifying execution baselines match Finish minus Start. These are observations from one read-only snapshot, not permanent expected counts.
 
-The parser contract below is explicit and covered by synthetic tests. It is not a claim that the source already follows this structure. Before live use, grant the connected account Viewer, inspect the header/merged cells and block layout, then adapt the mapping or parser in a reviewed change if needed. No monitoring destination workbook was supplied.
+The new `SRO_2026` profile follows the observed narrative structure and was run locally against the captured values. Production ingestion remains gated on permanent source IDs and Project mapping: the source has no Planning_Sync_ID; its display number 35 appears twice. The user chose **Planning-team-owned ID setup with Viewer access retained**, and **SOURCE_ONCE** initial progress migration. No changes, ID writes, triggers, or Apps Script installation have been made in the live source. No monitoring destination was supplied. Source content/IDs and local captured data are not committed to this repository.
+
+## Inspected SRO-2026 profile
+
+Set `PLANNING_PROFILE=SRO_2026`, `PLANNING_INITIAL_ACTUAL=SOURCE_ONCE`, `PLANNING_PROVISION_IDS=FALSE`, and `PLANNING_PUSHBACK_ENABLED=FALSE`. The generic profile remains available for conventional column-mapped sources. The narrative layout is configurable through `PLANNING_LAYOUT_JSON`; defaults match the inspected sheet:
+
+| Source | Meaning |
+| --- | --- |
+| Row 4, F:J | PROCESS / DURATION / START / END / PROGRESS headers |
+| Row 6 onward | Request blocks beginning at DATA PREPARATIONS, followed by APPROVAL, TENDER, EXECUTION, COMPLETED |
+| B/C labels, E values | STORE / LOCATION, REQUEST ITEM, ISSUER, REQUEST DATE, RO DATE |
+| G/H/I on EXECUTION | Duration / Start / Finish |
+| J on TENDER | The **only** eligibility progress value |
+| J on EXECUTION | Progress copied once on initial import; later owned by SRO |
+| J between blocks | AVERAGE summary; ignored for eligibility |
+| A | Display number only; duplicate numbers are allowed and never used as identity |
+| O4 and O on block-start rows | Dedicated Planning_Sync_ID header and immutable values, to be added by the Planning team |
+
+The parser does not assume a fixed six-row stride: it finds block boundaries from process labels and validates metadata labels. It returns real source coordinates for later targeted writes, not row-derived keys. Existing notes in M/N and sparkline/summary cells are left alone. Unknown stages, malformed separators, reused IDs, occupied ID header columns and invalid qualifying dates fail explicitly.
+
+`PLANNING_PROJECT_MAP_JSON` maps **exact location text** to active Project_ID values in the monitoring Project Master. Review spelling/aliases explicitly; no fuzzy matching or invented project IDs. `PLANNING_DATE_YEAR` defaults blank: set an explicit year only after reviewing source dates that lack four-digit years. The inspected source has three ambiguous date cells across two blocks (including `27 Maret` and `31 Maret 26`). Four-digit Indonesian dates and native Sheet dates need no fallback. A local diagnostic with year 2026 plus temporary in-memory keys/project mappings parsed all 49 blocks without warnings; that diagnostic did not create live IDs or authorize a date inference.
+
+Run `previewPlanningSource` from the menu for a read-only readiness summary even before IDs/mappings are ready. It reports missing IDs/mappings and date problems and never writes to source or monitoring. Normal sync refuses qualifying records without permanent IDs, a Project mapping or valid dates.
+
+Team ID setup: add `Planning_Sync_ID` at O4, then one distinct persisted UUID at each DATA PREPARATIONS row, preserving every existing column. Keep continuation ID cells blank. Protect the column; new request templates must generate a fresh persisted UUID. Do not copy an existing UUID, use a row-number formula, renumber IDs or derive them from request text. `PLANNING_PROVISION_IDS=TRUE` intentionally rejects the SRO_2026 profile because the user assigned ID maintenance to the Planning team; the generic profile's optional provisioning remains unchanged.
 
 ## Install or upgrade
 
@@ -24,6 +48,11 @@ The parser contract below is explicit and covered by synthetic tests. It is not 
 | `PLANNING_SPREADSHEET_ID` | Source workbook ID from its URL; required |
 | `PLANNING_SHEET_NAME` | Exact tab name; user-supplied target is `SRO-2026` |
 | `PLANNING_HEADER_ROW` | One-based row holding column labels; default 1 |
+| `PLANNING_PROFILE` | GENERIC (default) or SRO_2026 |
+| `PLANNING_LAYOUT_JSON` | Explicit SRO_2026 header/first-data rows and column numbers |
+| `PLANNING_PROJECT_MAP_JSON` | Exact location to active Project_ID, for SRO_2026 |
+| `PLANNING_DATE_YEAR` | Explicit fallback year for partial metadata dates; blank refuses inference |
+| `PLANNING_INITIAL_ACTUAL` | ZERO (generic default), BLANK, or SOURCE_ONCE; use user-approved SOURCE_ONCE for this migration |
 | `PLANNING_COLUMNS_JSON` | Logical fields → exact source header labels |
 | `PLANNING_STAGES_JSON` | Recognized stage labels; defaults to DESIGN/APPROVAL/TENDER/EXECUTION/COMPLETED |
 | `PLANNING_PUSHBACK_ENABLED` | Boolean FALSE by default; TRUE permits execution-progress writes and approved baseline revision writes, requiring Editor on the source |
@@ -39,7 +68,7 @@ Example column mapping (adapt the labels, not the logical keys):
 {"id":"Planning_Sync_ID","project":"Project_ID","item":"Request_Item","location":"Store_Location","issuer":"Issuer","requestDate":"Request_Date","roDate":"RO_Date","stage":"Stage","progress":"Progress","duration":"Duration","start":"Start","finish":"Finish"}
 ```
 
-Optional metadata keys `location`, `issuer`, `requestDate`, `roDate` can map to `null` when absent. Required keys cannot. Duplicate/missing/overlapping mapped headers are rejected. Dates must be actual Sheet date values, progress a numeric fraction 0–1 (100% = 1), and duration a positive number. Date-like strings are not guessed. Text fields are limited to 2,000 characters; formula-like strings are rejected. Existing source formulas are read as values, but write targets containing formulas are rejected.
+For the GENERIC profile, optional metadata keys `location`, `issuer`, `requestDate`, `roDate` can map to `null` when absent. Required keys cannot. Duplicate/missing/overlapping mapped headers are rejected. Generic dates must be actual Sheet date values; the narrative profile additionally supports validated Indonesian date strings and Sheets serial dates. Progress is a numeric fraction 0–1 (100% = 1), and duration a positive number. Text fields are limited to 2,000 characters; formula-like strings are rejected. Existing source formulas are read as values; direct writes to formulas remain rejected.
 
 ## Block contract and IDs
 
@@ -56,7 +85,7 @@ Only Tender exactly 100% qualifies for import. If an already-created SRO's Tende
 
 Planning owns request metadata and Current baseline. Original_Start/Original_Finish capture the **first complete valid pair** and never change. Execution Duration must equal Finish minus Start without +1; zero/reversed/mismatched durations fail explicitly. A valid Planning baseline revision updates Current and writes field-level History Log entries. This assumes upstream baseline edits have already followed the Planning team's approval process; there is no upstream approval field in the supplied specification.
 
-SRO owns actual progress. New records initialize actual at 0 without inventing a Last_Progress_Update timestamp; inbound sync never imports EXECUTION progress over it. Existing source progress must be reviewed during migration. Thursday planned progress uses calendar dates in workbook time zone and clamps 0–1; health uses the configured percentage-point threshold and overdue override. Exactly 100% moves to WAITING VERIFICATION; PM/Admin verification also requires Actual_Finish and closes the record. A closed record cannot be edited through the pilot handler.
+SRO owns actual progress after initial import. `PLANNING_INITIAL_ACTUAL=SOURCE_ONCE` copies the source EXECUTION fraction only when creating a record, preserving existing completed/partial progress. Subsequent source changes never overwrite SRO actual. BLANK leaves initial actual for manual review; ZERO retains the generic initial behavior. None invents a Last_Progress_Update, Actual_Finish or PM verification. Initial 100% moves to WAITING VERIFICATION, not automatically CLOSED. Thursday planned progress uses calendar dates in workbook time zone and clamps 0–1; health uses the configured percentage-point threshold and overdue override. PM/Admin verification also requires Actual_Finish. A closed record cannot be edited through the pilot handler.
 
 `Reporting_Status` is independent of health. A human progress update marks UPDATED. Missing/stale-update detection and weekly snapshots remain Sprint 7. The planned-progress checkpoint is the latest Thursday date per the locked formula, not a frozen snapshot at the configured cutoff time. `recalculateSroPilot` refreshes health manually; successful inbound polling also recalculates qualifying SROs.
 
@@ -66,7 +95,7 @@ SRO owns actual progress. New records initialize actual at 0 without inventing a
 2. `setupSroPilot` grants Site/PM the supported input ranges. Refresh after access/master/grid changes with `refreshSroPilotAccess`; foundation/user refresh also preserves pilot protections once enabled.
 3. Edit **one cell at a time** in an existing SRO. Site fields: Actual_Progress, Actual_Start, Actual_Finish, Issue, Mitigation, Remarks, Proposed_Finish, Revision_Reason. PM/Admin additionally control Main_Vendor, Supporting_Vendor, Revision_Status, Verification_Status. IDs, original/current baseline, computed state and timestamps stay protected.
 4. The installed trigger validates the actual editor identity and project grant. Missing identity or unsupported fields fail closed. Invalid and multi-cell edits are restored from the ID-keyed committed snapshot. Use `updateSroRecord(id, patch)` for a controlled multi-field Admin update; direct Sheets paste is unsupported. PM/Site should use the installed sheet handler because it performs protected system writes as the installer while validating `e.user` as the editor.
-5. A finish plus reason creates PENDING. PM/Admin selects APPROVED or REJECTED. Approval requires source Editor/push-back enabled and checks that the source baseline still matches the last imported baseline. It writes the Planning execution finish/duration and updates Current with audit; Original is preserved. Rejection retains the proposal and reason for history. Automatic approval is never inferred from source timing.
+5. A finish plus reason creates PENDING. PM/Admin selects APPROVED or REJECTED. Approval requires source Editor/push-back enabled and checks that the source baseline still matches the last imported baseline. For a literal Finish, it writes finish/duration. For the inspected same-row `Finish=Start+Duration` formula, it changes only Duration and preserves the formula. Other Finish formulas are rejected. Current is updated with audit; Original is preserved. Rejection retains the proposal and reason for history. Automatic approval is never inferred from source timing. This future Editor path remains disabled for the user's current Viewer connection.
 
 ## Push-back and recovery
 
@@ -80,22 +109,23 @@ Google Sheets has no transaction spanning both workbooks. Concurrent Planning ro
 
 ## Tests and live acceptance
 
-Run `npm test` / `node --test tests/*.test.cjs`. No dependency installation is needed. The suite covers **24 passing local tests**: 8 foundation regressions and 16 SRO cases covering acceptance tests 1–11, 25–27, 37–39, Tender regression/removal, Design-only items, immutable keys after block moves, disabled/failed pushes, source formula protection, project access, edit restoration, trigger idempotency, and UUID provisioning. All fixtures are synthetic; they contain no source workbook records.
+Run `npm test` / `node --test tests/*.test.cjs`. No dependency installation is needed. The suite covers **30 passing local tests**: the previous 24 plus 6 narrative-profile/date/migration/formula-preservation cases. Acceptance tests 1–11, 25–27 and 37–39 remain covered locally. Committed fixtures are synthetic; they contain no source workbook records. Separately, the adapter parsed all 49 blocks/39 qualifying items from a read-only captured source snapshot, with readiness blockers reported; an in-memory simulation of IDs/mapping/year also passed. Neither is a live Apps Script deployment or permission/trigger test.
 
 Before production, in disposable source and destination copies:
 
-1. Grant Viewer and inspect actual `SRO-2026` structure; resolve mapping/merged-cell differences and immutable source IDs. Verify no source writes in Viewer mode.
+1. Viewer inspection and structure adaptation are complete. Have Planning add stable IDs, populate the destination Project Master and exact location mapping, confirm the year of partial dates and run the read-only preview. Verify no source writes in Viewer mode.
 2. Create a new incomplete-Tender item, poll, finish Tender, poll twice; confirm exactly one SRO. Complete its baseline and confirm activation. Move the complete block and check ID stability.
 3. Revise baseline and confirm Original unchanged and History populated. Verify the 60/62, 60/53 and 60/50 health cases, Thursday boundaries and time zones.
 4. Enter actual as an assigned Site user; with push-back disabled confirm local persistence + ERROR. Grant Editor to the installer on the disposable source, enable push-back and retry; confirm only correct EXECUTION progress changes.
 5. Verify PM-only approval/closure, blocked unknown identity/project, multi-cell rejection and pending-edit recovery. Test source access revoked and formula write targets.
 6. Enable polling and verify a newly Tender-complete item is picked up within the configured interval. Inspect the installer's Apps Script Executions for failures; disable polling after the test.
 
-These live checks are **pending**, not represented by the local test results.
+The remaining live checks are **pending**, not represented by the local test results. The first source inspection is complete; the team-owned ID and destination configuration steps remain outstanding.
 
 ## Changed modules and next sprint
 
 - `PlanningParser.gs`: configurable blocks, source reads and optional persisted UUIDs.
+- `PlanningSro2026.gs`: inspected narrative layout, read-only preview and explicit Indonesian-date normalization.
 - `SROSync.gs`, `SROStore.gs`: gated inbound sync, stable lookup, snapshots, audit and retryable push-back.
 - `ProgressEngine.gs`: calendar baseline/Thursday progress and health.
 - `SROEdits.gs`, `SROPermissions.gs`: allowed fields, project/role checks, revision/verification, installed edit handler and opt-in poller.

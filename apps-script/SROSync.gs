@@ -18,6 +18,8 @@ function planningSyncJob() {
       var before = sroTable_(ss); assertSroClean_(before, sroSnapshots_(ss));
       if (setting_(ss, 'PLANNING_PROVISION_IDS') === true) provisionPlanningIds_(ss);
       var planning = readPlanning_(ss), cfg = progressConfig_(ss);
+      var initialActual = setting_(ss, 'PLANNING_INITIAL_ACTUAL');
+      if (['ZERO', 'BLANK', 'SOURCE_ONCE'].indexOf(initialActual) < 0) throw new Error('INVALID_SETTING: PLANNING_INITIAL_ACTUAL');
       var projects = rows_(ss.getSheetByName('10_PROJECT_MASTER'));
       var records = before.map(function (r) { return Object.assign({}, r); });
       var byKey = Object.create(null), entries = [];
@@ -26,6 +28,7 @@ function planningSyncJob() {
       planning.blocks.forEach(function (b) {
         if (b.stages.TENDER.progress !== 1) return;
         if (!projects.some(function (r) { return r[0] === b.project && r[10] === true; })) throw new Error('INVALID_PROJECT: ' + b.project);
+        if (!byKey[b.id] && initialActual === 'SOURCE_ONCE') validateProgress_(b.stages.EXECUTION.progress, true);
         baselineState_(b.stages.EXECUTION.start, b.stages.EXECUTION.finish, b.stages.EXECUTION.duration, cfg.timezone);
         ['requestDate', 'roDate'].forEach(function (f) { if (b[f] !== undefined) assertDate_(b[f], f); });
         if (byKey[b.id] && byKey[b.id].Project_ID !== b.project) throw new Error('BASELINE_MISMATCH: source project changed for ' + b.id);
@@ -41,7 +44,8 @@ function planningSyncJob() {
         if (creating) {
           record = {}; PMCS.schemas['01_SRO'].forEach(function (h) { record[h] = ''; });
           record.SRO_ID = newIds[nextNewId++]; record.Planning_Sync_ID = b.id;
-          record.Actual_Progress = 0; record.Verification_Status = 'NOT READY'; record.Revision_Status = 'NONE';
+          record.Actual_Progress = initialActual === 'SOURCE_ONCE' ? b.stages.EXECUTION.progress : initialActual === 'BLANK' ? '' : 0;
+          record.Verification_Status = record.Actual_Progress === 1 ? 'WAITING VERIFICATION' : 'NOT READY'; record.Revision_Status = 'NONE';
           records.push(record); byKey[b.id] = record;
         }
         var old = Object.assign({}, record), execution = b.stages.EXECUTION;

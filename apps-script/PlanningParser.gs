@@ -4,6 +4,11 @@ function planningDefaults_() {
     ['PLANNING_SPREADSHEET_ID', '', 'Required: source workbook ID'],
     ['PLANNING_SHEET_NAME', '', 'Required: source tab name'],
     ['PLANNING_HEADER_ROW', 1, 'One-based header row'],
+    ['PLANNING_PROFILE', 'GENERIC', 'GENERIC or SRO_2026 narrative layout'],
+    ['PLANNING_LAYOUT_JSON', JSON.stringify(sro2026Layout_()), 'SRO_2026 column/row layout; ID column O reserved only after approval'],
+    ['PLANNING_PROJECT_MAP_JSON', '{}', 'Exact source location -> active Project_ID'],
+    ['PLANNING_DATE_YEAR', '', 'Explicit year for missing/two-digit metadata dates; no automatic inference'],
+    ['PLANNING_INITIAL_ACTUAL', 'ZERO', 'ZERO, BLANK or SOURCE_ONCE; migration policy for new records only'],
     ['PLANNING_PUSHBACK_ENABLED', false, 'Enable only after source Editor access and pilot verification'],
     ['PLANNING_PROVISION_IDS', false, 'Optional Editor mode: persist UUID on new DESIGN rows in dedicated ID column'],
     ['PLANNING_COLUMNS_JSON', JSON.stringify({id: 'Planning_Sync_ID', project: 'Project_ID', item: 'Request_Item', location: 'Store_Location', issuer: 'Issuer', requestDate: 'Request_Date', roDate: 'RO_Date', stage: 'Stage', progress: 'Progress', duration: 'Duration', start: 'Start', finish: 'Finish'}), 'Header labels; optional metadata labels may be null'],
@@ -17,10 +22,17 @@ function planningConfig_(ss) {
   catch (error) { throw new Error('PLANNING_STRUCTURE_CHANGED: invalid JSON mapping'); }
   if (!cfg.spreadsheetId || !cfg.sheetName || !Number.isInteger(cfg.headerRow) || cfg.headerRow < 1) throw new Error('PLANNING_STRUCTURE_CHANGED: configure source workbook, tab and header row');
   if (!Array.isArray(cfg.stages) || cfg.stages.indexOf('TENDER') < 0 || cfg.stages.indexOf('EXECUTION') < 0 || new Set(cfg.stages).size !== cfg.stages.length) throw new Error('PLANNING_STRUCTURE_CHANGED: invalid stage list');
+  cfg.profile = setting_(ss, 'PLANNING_PROFILE'); cfg.timezone = ss.getSpreadsheetTimeZone();
+  if (['GENERIC', 'SRO_2026'].indexOf(cfg.profile) < 0) throw new Error('PLANNING_STRUCTURE_CHANGED: unknown profile');
+  try { cfg.layout = JSON.parse(setting_(ss, 'PLANNING_LAYOUT_JSON')); cfg.projectMap = JSON.parse(setting_(ss, 'PLANNING_PROJECT_MAP_JSON')); }
+  catch (error) { throw new Error('PLANNING_STRUCTURE_CHANGED: invalid layout/project mapping JSON'); }
+  if (!cfg.projectMap || typeof cfg.projectMap !== 'object' || Array.isArray(cfg.projectMap)) throw new Error('INVALID_PROJECT: invalid mapping');
+  cfg.dateYear = setting_(ss, 'PLANNING_DATE_YEAR');
   return cfg;
 }
 
 function parsePlanning_(values, cfg) {
+  if (cfg.profile === 'SRO_2026') return parseSro2026_(values, cfg, false);
   var header = values[cfg.headerRow - 1];
   if (!header) throw new Error('PLANNING_STRUCTURE_CHANGED: header row missing');
   var columns = {}, required = ['id', 'project', 'item', 'stage', 'progress', 'duration', 'start', 'finish'];
@@ -86,6 +98,7 @@ function provisionPlanningIds_(ss) {
   var sheet = source.getSheetByName(cfg.sheetName);
   if (!sheet) throw new Error('PLANNING_STRUCTURE_CHANGED: source tab missing');
   var values = sheet.getDataRange().getValues(), copy = values.map(function (r) { return r.slice(); });
+  if (cfg.profile === 'SRO_2026') return provisionSro2026Ids_(ss, cfg, sheet, values);
   var header = copy[cfg.headerRow - 1] || [], idColumn = header.indexOf(cfg.columns.id), stageColumn = header.indexOf(cfg.columns.stage), cells = [];
   if (idColumn < 0 || stageColumn < 0) throw new Error('PLANNING_STRUCTURE_CHANGED: ID/stage header missing');
   copy.slice(cfg.headerRow).forEach(function (r, i) {

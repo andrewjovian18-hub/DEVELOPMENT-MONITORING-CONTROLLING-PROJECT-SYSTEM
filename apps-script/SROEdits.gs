@@ -55,7 +55,13 @@ function approveSroBaseline_(ss, old, record) {
   if (block.project !== old.Project_ID || block.stages.TENDER.progress !== 1 || !sameSroValue_(execution.start, old.Current_Start) || !sameSroValue_(execution.finish, old.Current_Finish) || execution.duration !== old.Execution_Duration_Source) throw new Error('BASELINE_MISMATCH: sync latest Planning baseline before approval');
   var duration = calendarDay_(record.Proposed_Finish, tz) - calendarDay_(record.Current_Start, tz);
   syncLog_(ss, [{id: record.SRO_ID, key: record.Planning_Sync_ID, direction: 'SRO_TO_PLANNING', field: 'REVISION_INTENT', old: old.Current_Finish, value: record.Proposed_Finish}]);
-  writePlanningCells_(planning, [{row: execution.row, column: planning.columns.finish, value: calendarDay_(record.Proposed_Finish, tz) + 25569}, {row: execution.row, column: planning.columns.duration, value: duration}]);
+  var finishFormula = planning.sheet.getRange(execution.row, planning.columns.finish + 1).getFormula().replace(/[\s$]/g, '').toUpperCase();
+  var startRef = columnA1_(planning.columns.start) + execution.row, durationRef = columnA1_(planning.columns.duration) + execution.row;
+  var cells = [{row: execution.row, column: planning.columns.duration, value: duration}];
+  if (finishFormula && finishFormula !== '=' + startRef + '+' + durationRef && finishFormula !== '=' + durationRef + '+' + startRef) throw new Error('PLANNING_STRUCTURE_CHANGED: unsupported finish formula; revision not written');
+  // Preserve the inspected Finish=Start+Duration formula; update its duration input only.
+  if (!finishFormula) cells.push({row: execution.row, column: planning.columns.finish, value: calendarDay_(record.Proposed_Finish, tz) + 25569});
+  writePlanningCells_(planning, cells);
   record.Current_Finish = record.Proposed_Finish; record.Execution_Duration_Source = duration;
   syncLog_(ss, [{id: record.SRO_ID, key: record.Planning_Sync_ID, direction: 'SRO_TO_PLANNING', field: 'Current_Finish', old: old.Current_Finish, value: record.Current_Finish}]);
 }

@@ -3,6 +3,7 @@ function onOpen() {
     .addItem('Initialize / refresh foundation', 'setupFoundation')
     .addItem('Set up SRO pilot', 'setupSroPilot')
     .addItem('Sync Planning now', 'planningSyncJob')
+    .addItem('Preview Planning source (read only)', 'previewPlanningSource')
     .addItem('Refresh SRO health', 'recalculateSroPilot')
     .addItem('Refresh SRO edit access', 'refreshSroPilotAccess')
     .addItem('Enable Planning auto-sync', 'enablePlanningAutoSync')
